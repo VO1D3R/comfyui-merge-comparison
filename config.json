@@ -1,0 +1,22 @@
+{
+  "methods": [
+    "Crossover",
+    "Geometric Median",
+    "Geometric Sum",
+    "N Average",
+    "Perpendicular Component",
+    "Rotate",
+    "Slerp",
+    "Weighted Sum"
+  ],
+  "seeds": [
+    "1",
+    "2",
+    "3",
+    "4"
+  ],
+  "images": [
+    "img_00001_.png",
+    "img_00002_.png"
+  ]
+}

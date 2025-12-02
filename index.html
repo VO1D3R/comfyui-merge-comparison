@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ComfyUI Merge Methods Test</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    
+    .image-container {
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .image-container:hover {
+      transform: scale(1.02);
+      box-shadow: 0 20px 40px rgba(59, 130, 246, 0.3);
+    }
+    
+    .image-container img {
+      width: 100%;
+      height: auto;
+      display: block;
+      transition: transform 0.3s ease;
+    }
+    
+    .image-container.zoomed img {
+      transform: scale(2);
+      cursor: zoom-out;
+    }
+    
+    .voted-animation {
+      animation: pulse 0.5s ease;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .fade-in {
+      animation: slideIn 0.4s ease;
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      border-radius: 9999px;
+      transition: width 0.5s ease;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      transition: all 0.3s ease;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(59, 130, 246, 0.5);
+    }
+    
+    .highlight-row {
+      background: linear-gradient(90deg, rgba(59, 130, 246, 0.1), transparent);
+      border-left: 4px solid #3b82f6;
+    }
+    
+    .tooltip {
+      position: relative;
+      display: inline-block;
+    }
+    
+    .tooltip .tooltiptext {
+      visibility: hidden;
+      background-color: #1f2937;
+      color: #fff;
+      text-align: center;
+      border-radius: 6px;
+      padding: 8px 12px;
+      position: absolute;
+      z-index: 1;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0;
+      transition: opacity 0.3s;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    
+    .tooltip:hover .tooltiptext {
+      visibility: visible;
+      opacity: 1;
+    }
+    
+    .hotkey {
+      display: inline-block;
+      padding: 4px 8px;
+      background: #374151;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      margin: 0 4px;
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+
+  <!-- ЭКРАН 1: Вход -->
+  <div id="login-screen" class="min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-md w-full bg-gray-800 rounded-2xl p-8 shadow-2xl fade-in">
+      <h1 class="text-4xl font-bold text-center mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+        🎨 Merge Methods Test
+      </h1>
+      <p class="text-gray-400 text-center mb-8">
+        Помоги выбрать лучший метод мерджа моделей!<br>
+        Займет ~5-10 минут
+      </p>
+      
+      <div class="mb-6">
+        <label class="block text-sm font-medium mb-2">Твой никнейм</label>
+        <input 
+          type="text" 
+          id="nickname" 
+          placeholder="alex_ml"
+          maxlength="20"
+          class="w-full px-4 py-3 bg-gray-700 rounded-lg border-2 border-gray-600 focus:border-blue-500 focus:outline-none transition"
+        >
+        <p class="text-xs text-gray-500 mt-2">Латиница, 3-20 символов</p>
+      </div>
+      
+      <button 
+        onclick="startVoting()" 
+        class="w-full py-4 btn-primary text-white font-bold rounded-lg"
+      >
+        Начать голосование 🚀
+      </button>
+      
+      <div class="mt-8 p-4 bg-gray-700 rounded-lg text-sm">
+        <h3 class="font-bold mb-2">📖 Как это работает:</h3>
+        <ul class="text-gray-300 space-y-1 text-xs">
+          <li>• Сравниваешь 2 картинки</li>
+          <li>• Выбираешь какая лучше</li>
+          <li>• Используй горячие клавиши A/D</li>
+          <li>• Можно пропустить (S)</li>
+          <li>• Твой голос анонимен</li>
+        </ul>
+      </div>
+      
+      <div class="mt-4 text-center">
+        <button onclick="showResults()" class="text-blue-400 hover:text-blue-300 text-sm underline">
+          Посмотреть результаты →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ЭКРАН 2: Голосование -->
+  <div id="vote-screen" class="hidden min-h-screen p-4">
+    <!-- Header -->
+    <div class="max-w-7xl mx-auto mb-6">
+      <div class="bg-gray-800 rounded-lg p-4 flex items-center justify-between flex-wrap gap-4">
+        <div class="flex items-center gap-4">
+          <div class="text-xl">👤 <span id="current-user" class="font-bold text-blue-400"></span></div>
+          <div class="text-sm">
+            Голосов: <span id="votes-count" class="font-bold text-green-400">0</span>
+          </div>
+          <div id="streak-display" class="text-sm hidden">
+            🔥 <span id="streak-count" class="font-bold text-orange-400">0</span>
+          </div>
+        </div>
+        
+        <div class="flex items-center gap-3">
+          <button onclick="showResults()" class="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 text-sm">
+            📊 Результаты
+          </button>
+          <button onclick="exportData()" class="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 text-sm">
+            💾 Экспорт
+          </button>
+        </div>
+      </div>
+      
+      <!-- Progress -->
+      <div class="mt-4">
+        <div class="flex justify-between text-sm mb-2">
+          <span>Прогресс: <span id="comparison-count">0/25</span></span>
+          <span id="eta">~5 мин</span>
+        </div>
+        <div class="w-full bg-gray-700 rounded-full h-2">
+          <div id="progress-bar" class="progress-bar w-0"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Voting Area -->
+    <div class="max-w-7xl mx-auto">
+      <div class="grid md:grid-cols-2 gap-6 mb-6">
+        <!-- Image A -->
+        <div class="bg-gray-800 rounded-2xl p-6 fade-in">
+          <div class="mb-4">
+            <h3 class="text-2xl font-bold text-blue-400" id="method-a">Method A</h3>
+            <p class="text-sm text-gray-400" id="seed-a">Seed 1 • img_00001_.png</p>
+            <p class="text-xs text-gray-500 mt-1">Elo: <span id="elo-a">1500</span></p>
+          </div>
+          
+          <div class="image-container mb-4" onclick="toggleZoom('imageA')">
+            <img id="imageA" src="" alt="Image A">
+          </div>
+          
+          <button 
+            onclick="vote('A')" 
+            class="w-full py-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-lg transition"
+          >
+            ← Выбрать A <span class="hotkey">A</span>
+          </button>
+        </div>
+
+        <!-- Image B -->
+        <div class="bg-gray-800 rounded-2xl p-6 fade-in">
+          <div class="mb-4">
+            <h3 class="text-2xl font-bold text-purple-400" id="method-b">Method B</h3>
+            <p class="text-sm text-gray-400" id="seed-b">Seed 1 • img_00001_.png</p>
+            <p class="text-xs text-gray-500 mt-1">Elo: <span id="elo-b">1500</span></p>
+          </div>
+          
+          <div class="image-container mb-4" onclick="toggleZoom('imageB')">
+            <img id="imageB" src="" alt="Image B">
+          </div>
+          
+          <button 
+            onclick="vote('B')" 
+            class="w-full py-4 bg-purple-600 hover:bg-purple-700 rounded-lg font-bold text-lg transition"
+          >
+            Выбрать B → <span class="hotkey">D</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex justify-center gap-4 mb-6">
+        <button 
+          onclick="voteEqual()" 
+          class="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+        >
+          🤷 Одинаковые <span class="hotkey">Space</span>
+        </button>
+        <button 
+          onclick="skip()" 
+          class="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+        >
+          ⏭️ Пропустить <span class="hotkey">S</span>
+        </button>
+        <button 
+          onclick="undoLast()" 
+          id="undo-btn"
+          class="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+          disabled
+        >
+          ↶ Отменить <span class="hotkey">Z</span>
+        </button>
+      </div>
+
+      <!-- Hotkeys Help -->
+      <div class="text-center text-sm text-gray-500">
+        Горячие клавиши: <span class="hotkey">A</span> или <span class="hotkey">←</span> = выбрать A  |  
+        <span class="hotkey">D</span> или <span class="hotkey">→</span> = выбрать B  |  
+        <span class="hotkey">Space</span> = равны  |  
+        <span class="hotkey">S</span> = пропустить  |  
+        <span class="hotkey">Z</span> = отменить
+      </div>
+    </div>
+  </div>
+
+  <!-- ЭКРАН 3: Результаты -->
+  <div id="results-screen" class="hidden min-h-screen p-4">
+    <div class="max-w-6xl mx-auto">
+      <div class="mb-6 flex justify-between items-center">
+        <h1 class="text-4xl font-bold">📊 Результаты</h1>
+        <button onclick="backToVoting()" class="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600">
+          ← Назад
+        </button>
+      </div>
+
+      <!-- Stats Summary -->
+      <div class="grid md:grid-cols-4 gap-4 mb-8">
+        <div class="bg-gray-800 rounded-lg p-6 text-center">
+          <div class="text-3xl font-bold text-blue-400" id="total-votes-display">0</div>
+          <div class="text-sm text-gray-400">Всего голосов</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-6 text-center">
+          <div class="text-3xl font-bold text-purple-400" id="total-users-display">0</div>
+          <div class="text-sm text-gray-400">Участников</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-6 text-center">
+          <div class="text-3xl font-bold text-green-400" id="completion-rate">0%</div>
+          <div class="text-sm text-gray-400">Завершили тест</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-6 text-center">
+          <div class="text-3xl font-bold text-orange-400" id="top-method">-</div>
+          <div class="text-sm text-gray-400">Лидер</div>
+        </div>
+      </div>
+
+      <!-- Methods Ranking -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-8">
+        <h2 class="text-2xl font-bold mb-4">🏆 Рейтинг методов</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-gray-700">
+                <th class="py-3 px-4 text-left">#</th>
+                <th class="py-3 px-4 text-left">Метод</th>
+                <th class="py-3 px-4 text-center">Elo</th>
+                <th class="py-3 px-4 text-center">Побед</th>
+                <th class="py-3 px-4 text-center">Поражений</th>
+                <th class="py-3 px-4 text-center">Win %</th>
+              </tr>
+            </thead>
+            <tbody id="methods-table-body">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Users Leaderboard -->
+      <div class="bg-gray-800 rounded-lg p-6">
+        <h2 class="text-2xl font-bold mb-4">👥 Таблица участников</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-gray-700">
+                <th class="py-3 px-4 text-left">#</th>
+                <th class="py-3 px-4 text-left">Никнейм</th>
+                <th class="py-3 px-4 text-center">Голосов</th>
+                <th class="py-3 px-4 text-center">Вклад</th>
+              </tr>
+            </thead>
+            <tbody id="users-table-body">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Export -->
+      <div class="mt-6 text-center">
+        <button onclick="exportData()" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition">
+          💾 Скачать все результаты (JSON)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== CONFIG ====================
+    const CONFIG = {
+      methods: [
+        "Crossover",
+        "Geometric Median",
+        "Geometric Sum",
+        "N Average",
+        "Perpendicular Component",
+        "Rotate",
+        "Slerp",
+        "Weighted Sum"
+      ],
+      seeds: ["1", "2", "3", "4"],
+      images: ["img_00001_.png", "img_00002_.png"],
+      imagesPath: "./images/", // Относительный путь к папке с картинками
+      
+      // Adaptive Elo settings
+      initialElo: 1500,
+      kFactorHigh: 40,  // Для методов с малым количеством голосов
+      kFactorLow: 16,   // Для методов с большим количеством голосов
+      kThreshold: 30,   // Порог переключения K-factor
+      
+      // Pairing strategy
+      explorationVotes: 15,  // Количество случайных голосов в начале
+      minComparisons: 25,     // Минимум сравнений перед остановкой
+      maxComparisons: 50,     // Максимум сравнений
+      closeEloRange: 200,     // Разница Elo для "близких" методов
+    };
+
+    // ==================== STATE ====================
+    let state = {
+      currentUser: null,
+      currentPair: null,
+      votesCount: 0,
+      streak: 0,
+      shownPairs: [],
+      voteHistory: [],
+      startTime: Date.now(),
+      lastVoteTime: Date.now(),
+    };
+
+    // ==================== STORAGE ====================
+    const Storage = {
+      save(key, value) {
+        localStorage.setItem(key, JSON.stringify(value));
+      },
+      
+      get(key, defaultValue = null) {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+      },
+      
+      // Methods data
+      getMethods() {
+        const methods = this.get('methods', {});
+        // Initialize if empty
+        if (Object.keys(methods).length === 0) {
+          CONFIG.methods.forEach(m => {
+            methods[m] = {
+              elo: CONFIG.initialElo,
+              wins: 0,
+              losses: 0,
+              ties: 0,
+              totalVotes: 0
+            };
+          });
+          this.save('methods', methods);
+        }
+        return methods;
+      },
+      
+      updateMethod(methodName, data) {
+        const methods = this.getMethods();
+        methods[methodName] = { ...methods[methodName], ...data };
+        this.save('methods', methods);
+      },
+      
+      // Users data
+      getUsers() {
+        return this.get('users', []);
+      },
+      
+      addOrUpdateUser(userData) {
+        const users = this.getUsers();
+        const existingIndex = users.findIndex(u => u.nickname === userData.nickname);
+        
+        if (existingIndex >= 0) {
+          users[existingIndex] = { ...users[existingIndex], ...userData };
+        } else {
+          users.push(userData);
+        }
+        
+        this.save('users', users);
+      },
+      
+      // Votes data
+      getVotes() {
+        return this.get('votes', []);
+      },
+      
+      addVote(voteData) {
+        const votes = this.getVotes();
+        votes.push(voteData);
+        this.save('votes', votes);
+      },
+    };
+
+    // ==================== ELO ALGORITHM ====================
+    const Elo = {
+      // Adaptive K-factor based on number of votes
+      getKFactor(totalVotes) {
+        return totalVotes < CONFIG.kThreshold ? CONFIG.kFactorHigh : CONFIG.kFactorLow;
+      },
+      
+      // Expected score
+      getExpected(ratingA, ratingB) {
+        return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+      },
+      
+      // Update ratings after a match
+      update(winnerName, loserName, isTie = false) {
+        const methods = Storage.getMethods();
+        const winner = methods[winnerName];
+        const loser = methods[loserName];
+        
+        const kWinner = this.getKFactor(winner.totalVotes);
+        const kLoser = this.getKFactor(loser.totalVotes);
+        
+        const expectedWinner = this.getExpected(winner.elo, loser.elo);
+        const expectedLoser = 1 - expectedWinner;
+        
+        let actualWinner, actualLoser;
+        
+        if (isTie) {
+          actualWinner = 0.5;
+          actualLoser = 0.5;
+          winner.ties++;
+          loser.ties++;
+        } else {
+          actualWinner = 1;
+          actualLoser = 0;
+          winner.wins++;
+          loser.losses++;
+        }
+        
+        winner.elo = Math.round(winner.elo + kWinner * (actualWinner - expectedWinner));
+        loser.elo = Math.round(loser.elo + kLoser * (actualLoser - expectedLoser));
+        
+        winner.totalVotes++;
+        loser.totalVotes++;
+        
+        Storage.updateMethod(winnerName, winner);
+        Storage.updateMethod(loserName, loser);
+        
+        return { winner: winner.elo, loser: loser.elo };
+      }
+    };
+
+    // ==================== PAIRING ALGORITHM ====================
+    const Pairing = {
+      generateAllPairs() {
+        const pairs = [];
+        
+        CONFIG.methods.forEach((methodA, i) => {
+          CONFIG.methods.forEach((methodB, j) => {
+            if (i < j) { // Avoid duplicates and self-comparison
+              CONFIG.seeds.forEach(seed => {
+                CONFIG.images.forEach(img => {
+                  pairs.push({
+                    id: `${methodA}_${seed}_${img}_vs_${methodB}_${seed}_${img}`,
+                    methodA,
+                    methodB,
+                    seed,
+                    image: img,
+                    pathA: `${CONFIG.imagesPath}${methodA}/${seed}/${img}`,
+                    pathB: `${CONFIG.imagesPath}${methodB}/${seed}/${img}`,
+                  });
+                });
+              });
+            }
+          });
+        });
+        
+        return pairs;
+      },
+      
+      // Adaptive pairing strategy
+      getNextPair() {
+        const allPairs = this.generateAllPairs();
+        const shown = state.shownPairs;
+        const remaining = allPairs.filter(p => !shown.includes(p.id));
+        
+        if (remaining.length === 0) {
+          return null; // All pairs shown
+        }
+        
+        // Exploration phase: random pairs
+        if (state.votesCount < CONFIG.explorationVotes) {
+          return remaining[Math.floor(Math.random() * remaining.length)];
+        }
+        
+        // Exploitation phase: prioritize close Elo matches
+        const methods = Storage.getMethods();
+        
+        // Score each pair based on Elo difference (lower is better)
+        const scoredPairs = remaining.map(pair => {
+          const eloA = methods[pair.methodA].elo;
+          const eloB = methods[pair.methodB].elo;
+          const eloDiff = Math.abs(eloA - eloB);
+          
+          // Prioritize pairs with close Elo
+          const score = eloDiff < CONFIG.closeEloRange ? 
+            eloDiff : 
+            eloDiff + 1000; // Penalty for large difference
+          
+          return { pair, score };
+        });
+        
+        // Sort by score and pick from top candidates (add randomness)
+        scoredPairs.sort((a, b) => a.score - b.score);
+        const topCandidates = scoredPairs.slice(0, Math.min(10, scoredPairs.length));
+        const selected = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+        
+        return selected.pair;
+      }
+    };
+
+    // ==================== UI FUNCTIONS ====================
+    function startVoting() {
+      const nickname = document.getElementById('nickname').value.trim();
+      
+      if (!nickname || nickname.length < 3) {
+        alert('Введи никнейм (минимум 3 символа)');
+        return;
+      }
+      
+      if (!/^[a-zA-Z0-9_-]+$/.test(nickname)) {
+        alert('Только латиница, цифры, _ и -');
+        return;
+      }
+      
+      state.currentUser = nickname;
+      document.getElementById('current-user').textContent = nickname;
+      
+      // Load user's previous progress
+      const users = Storage.getUsers();
+      const existingUser = users.find(u => u.nickname === nickname);
+      
+      if (existingUser) {
+        state.votesCount = existingUser.votes || 0;
+        state.shownPairs = existingUser.shownPairs || [];
+        updateUI();
+      }
+      
+      switchScreen('vote-screen');
+      loadNextPair();
+    }
+
+    function loadNextPair() {
+      const pair = Pairing.getNextPair();
+      
+      if (!pair) {
+        // All pairs shown or reached max
+        showCompletionMessage();
+        return;
+      }
+      
+      state.currentPair = pair;
+      
+      // Update UI
+      document.getElementById('method-a').textContent = pair.methodA;
+      document.getElementById('method-b').textContent = pair.methodB;
+      document.getElementById('seed-a').textContent = `Seed ${pair.seed} • ${pair.image}`;
+      document.getElementById('seed-b').textContent = `Seed ${pair.seed} • ${pair.image}`;
+      
+      // Show Elo
+      const methods = Storage.getMethods();
+      document.getElementById('elo-a').textContent = methods[pair.methodA].elo;
+      document.getElementById('elo-b').textContent = methods[pair.methodB].elo;
+      
+      // Load images
+      document.getElementById('imageA').src = pair.pathA;
+      document.getElementById('imageB').src = pair.pathB;
+      
+      // Preload next pair images
+      preloadNextPair();
+    }
+
+    function preloadNextPair() {
+      // Simulate next pair to preload
+      const tempShown = [...state.shownPairs];
+      if (state.currentPair) {
+        tempShown.push(state.currentPair.id);
+      }
+      
+      const savedShown = state.shownPairs;
+      state.shownPairs = tempShown;
+      
+      const nextPair = Pairing.getNextPair();
+      
+      state.shownPairs = savedShown;
+      
+      if (nextPair) {
+        const img1 = new Image();
+        const img2 = new Image();
+        img1.src = nextPair.pathA;
+        img2.src = nextPair.pathB;
+      }
+    }
+
+    function vote(choice) {
+      if (!state.currentPair) return;
+      
+      const winner = choice === 'A' ? state.currentPair.methodA : state.currentPair.methodB;
+      const loser = choice === 'A' ? state.currentPair.methodB : state.currentPair.methodA;
+      
+      processVote(winner, loser, false);
+      
+      // Animation
+      const container = choice === 'A' ? 
+        document.querySelectorAll('.image-container')[0] : 
+        document.querySelectorAll('.image-container')[1];
+      container.classList.add('voted-animation');
+      setTimeout(() => container.classList.remove('voted-animation'), 500);
+    }
+
+    function voteEqual() {
+      if (!state.currentPair) return;
+      processVote(state.currentPair.methodA, state.currentPair.methodB, true);
+    }
+
+    function skip() {
+      if (!state.currentPair) return;
+      
+      // Just mark as shown without updating Elo
+      state.shownPairs.push(state.currentPair.id);
+      
+      loadNextPair();
+      updateUI();
+    }
+
+    function undoLast() {
+      if (state.voteHistory.length === 0) return;
+      
+      const lastVote = state.voteHistory.pop();
+      
+      // Remove from shown pairs
+      const index = state.shownPairs.indexOf(lastVote.pairId);
+      if (index > -1) {
+        state.shownPairs.splice(index, 1);
+      }
+      
+      // Decrease vote count
+      state.votesCount--;
+      
+      // Note: We don't reverse Elo changes for simplicity
+      // In production, you'd want to store Elo history
+      
+      updateUI();
+      saveProgress();
+      
+      // Reload current pair
+      loadNextPair();
+    }
+
+    function processVote(winner, loser, isTie) {
+      // Update Elo
+      Elo.update(winner, loser, isTie);
+      
+      // Record vote
+      const voteData = {
+        user: state.currentUser,
+        pairId: state.currentPair.id,
+        winner: isTie ? 'tie' : winner,
+        loser: isTie ? 'tie' : loser,
+        timestamp: Date.now(),
+        timeSpent: (Date.now() - state.lastVoteTime) / 1000
+      };
+      
+      Storage.addVote(voteData);
+      
+      // Update state
+      state.shownPairs.push(state.currentPair.id);
+      state.votesCount++;
+      state.streak++;
+      state.voteHistory.push(voteData);
+      state.lastVoteTime = Date.now();
+      
+      // Check for milestones
+      checkMilestones();
+      
+      // Save progress
+      saveProgress();
+      
+      // Update UI
+      updateUI();
+      
+      // Load next pair
+      setTimeout(() => loadNextPair(), 300);
+    }
+
+    function checkMilestones() {
+      const milestones = [5, 10, 25, 50, 100];
+      
+      if (milestones.includes(state.votesCount)) {
+        // Confetti!
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+        
+        setTimeout(() => {
+          alert(`🎉 Отлично! Ты сделал ${state.votesCount} голосов!`);
+        }, 500);
+      }
+    }
+
+    function saveProgress() {
+      const userData = {
+        nickname: state.currentUser,
+        votes: state.votesCount,
+        shownPairs: state.shownPairs,
+        lastActive: Date.now()
+      };
+      
+      Storage.addOrUpdateUser(userData);
+    }
+
+    function updateUI() {
+      document.getElementById('votes-count').textContent = state.votesCount;
+      
+      const progress = Math.min(100, (state.votesCount / CONFIG.minComparisons) * 100);
+      document.getElementById('progress-bar').style.width = `${progress}%`;
+      
+      document.getElementById('comparison-count').textContent = 
+        `${state.votesCount}/${CONFIG.minComparisons}`;
+      
+      // ETA calculation
+      const avgTimePerVote = state.votesCount > 0 ? 
+        (Date.now() - state.startTime) / state.votesCount / 1000 : 5;
+      const remainingVotes = Math.max(0, CONFIG.minComparisons - state.votesCount);
+      const etaSeconds = Math.round(remainingVotes * avgTimePerVote);
+      const etaMinutes = Math.floor(etaSeconds / 60);
+      
+      document.getElementById('eta').textContent = 
+        etaMinutes > 0 ? `~${etaMinutes} мин` : `<1 мин`;
+      
+      // Streak
+      if (state.streak >= 5) {
+        document.getElementById('streak-display').classList.remove('hidden');
+        document.getElementById('streak-count').textContent = state.streak;
+      }
+      
+      // Undo button
+      document.getElementById('undo-btn').disabled = state.voteHistory.length === 0;
+    }
+
+    function showCompletionMessage() {
+      confetti({
+        particleCount: 200,
+        spread: 100,
+        origin: { y: 0.5 }
+      });
+      
+      setTimeout(() => {
+        alert(`🎊 Поздравляю! Ты завершил тест!\n\nВсего голосов: ${state.votesCount}\nСпасибо за участие!`);
+        showResults();
+      }, 1000);
+    }
+
+    function toggleZoom(imageId) {
+      const container = document.getElementById(imageId).parentElement;
+      container.classList.toggle('zoomed');
+    }
+
+    function showResults() {
+      switchScreen('results-screen');
+      renderResults();
+    }
+
+    function backToVoting() {
+      switchScreen(state.currentUser ? 'vote-screen' : 'login-screen');
+    }
+
+    function renderResults() {
+      const methods = Storage.getMethods();
+      const users = Storage.getUsers();
+      const votes = Storage.getVotes();
+      
+      // Update summary stats
+      document.getElementById('total-votes-display').textContent = votes.length;
+      document.getElementById('total-users-display').textContent = users.length;
+      
+      // Calculate completion rate
+      const completedUsers = users.filter(u => u.votes >= CONFIG.minComparisons).length;
+      const completionRate = users.length > 0 ? 
+        Math.round((completedUsers / users.length) * 100) : 0;
+      document.getElementById('completion-rate').textContent = `${completionRate}%`;
+      
+      // Top method
+      const sortedMethods = Object.entries(methods).sort((a, b) => b[1].elo - a[1].elo);
+      document.getElementById('top-method').textContent = 
+        sortedMethods.length > 0 ? sortedMethods[0][0] : '-';
+      
+      // Render methods table
+      const methodsTableBody = document.getElementById('methods-table-body');
+      methodsTableBody.innerHTML = sortedMethods.map((entry, index) => {
+        const [name, data] = entry;
+        const total = data.wins + data.losses + data.ties;
+        const winRate = total > 0 ? Math.round((data.wins / total) * 100) : 0;
+        
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+        
+        return `
+          <tr class="border-b border-gray-700 hover:bg-gray-700 transition">
+            <td class="py-3 px-4">${medal} ${index + 1}</td>
+            <td class="py-3 px-4 font-bold">${name}</td>
+            <td class="py-3 px-4 text-center text-blue-400 font-bold">${data.elo}</td>
+            <td class="py-3 px-4 text-center text-green-400">${data.wins}</td>
+            <td class="py-3 px-4 text-center text-red-400">${data.losses}</td>
+            <td class="py-3 px-4 text-center">${winRate}%</td>
+          </tr>
+        `;
+      }).join('');
+      
+      // Render users table
+      const sortedUsers = users.sort((a, b) => b.votes - a.votes);
+      const usersTableBody = document.getElementById('users-table-body');
+      
+      const totalVotes = votes.length;
+      
+      usersTableBody.innerHTML = sortedUsers.map((user, index) => {
+        const contribution = totalVotes > 0 ? 
+          Math.round((user.votes / totalVotes) * 100) : 0;
+        
+        const isCurrentUser = user.nickname === state.currentUser;
+        const rowClass = isCurrentUser ? 'highlight-row' : '';
+        const crown = index === 0 ? '👑 ' : '';
+        
+        return `
+          <tr class="border-b border-gray-700 hover:bg-gray-700 transition ${rowClass}">
+            <td class="py-3 px-4">${crown}${index + 1}</td>
+            <td class="py-3 px-4 font-bold">${user.nickname}${isCurrentUser ? ' (ты)' : ''}</td>
+            <td class="py-3 px-4 text-center text-purple-400 font-bold">${user.votes}</td>
+            <td class="py-3 px-4 text-center">${contribution}%</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function exportData() {
+      const data = {
+        methods: Storage.getMethods(),
+        users: Storage.getUsers(),
+        votes: Storage.getVotes(),
+        exportedAt: new Date().toISOString(),
+        config: CONFIG
+      };
+      
+      const blob = new Blob([JSON.stringify(data, null, 2)], 
+                            { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `merge-test-results-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      alert('✅ Результаты экспортированы!');
+    }
+
+    function switchScreen(screenId) {
+      document.querySelectorAll('[id$="-screen"]').forEach(screen => {
+        screen.classList.add('hidden');
+      });
+      document.getElementById(screenId).classList.remove('hidden');
+    }
+
+    // ==================== HOTKEYS ====================
+    document.addEventListener('keydown', (e) => {
+      // Only in vote screen
+      if (document.getElementById('vote-screen').classList.contains('hidden')) {
+        return;
+      }
+      
+      switch(e.key.toLowerCase()) {
+        case 'a':
+        case 'arrowleft':
+          e.preventDefault();
+          vote('A');
+          break;
+        case 'd':
+        case 'arrowright':
+          e.preventDefault();
+          vote('B');
+          break;
+        case ' ':
+          e.preventDefault();
+          voteEqual();
+          break;
+        case 's':
+          e.preventDefault();
+          skip();
+          break;
+        case 'z':
+          e.preventDefault();
+          undoLast();
+          break;
+      }
+    });
+
+    // ==================== INITIALIZATION ====================
+    window.addEventListener('load', () => {
+      // Check if user was voting before
+      const users = Storage.getUsers();
+      
+      // Show login screen
+      switchScreen('login-screen');
+    });
+  </script>
+</body>
+</html>
